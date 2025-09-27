@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Python Package Manager - Gradio Interface
+Enhanced with USB Storage Visualization and Cache Management
 A complete GUI tool for managing Python packages with real-time console output
 Fully compatible with Gradio 5.47.1 and all versions
 """
-
 import gradio as gr
 import subprocess
 import sys
@@ -12,7 +12,133 @@ import pandas as pd
 import threading
 import queue
 import time
+import shutil
+import psutil
+import os
+import platform
 from typing import List, Tuple, Optional
+import json
+
+def get_storage_info():
+    """Get storage information for all mounted drives"""
+    storage_data = []
+
+    # Get all disk partitions
+    partitions = psutil.disk_partitions()
+
+    for partition in partitions:
+        try:
+            partition_usage = psutil.disk_usage(partition.mountpoint)
+
+            # Convert bytes to GB
+            total_gb = partition_usage.total / (1024**3)
+            used_gb = partition_usage.used / (1024**3)
+            free_gb = partition_usage.free / (1024**3)
+            used_percent = (partition_usage.used / partition_usage.total) * 100
+
+            # Detect if it's a USB drive
+            is_usb = detect_usb_drive(partition.mountpoint, partition.device)
+
+            storage_data.append({
+                'Device': partition.device,
+                'Mountpoint': partition.mountpoint,
+                'FileSystem': partition.fstype,
+                'Total (GB)': round(total_gb, 2),
+                'Used (GB)': round(used_gb, 2),
+                'Free (GB)': round(free_gb, 2),
+                'Used %': round(used_percent, 1),
+                'Type': 'USB' if is_usb else 'Internal'
+            })
+        except PermissionError:
+            # Can't access drive - likely system drive without permissions
+            continue
+
+    return storage_data
+
+def detect_usb_drive(mountpoint, device):
+    """Detect if a drive is USB-connected"""
+    try:
+        # Check common USB mount points
+        usb_indicators = ['/media/', '/mnt/', '/run/media/']
+        if any(mountpoint.startswith(indicator) for indicator in usb_indicators):
+            return True
+
+        # On Linux, check if device is in USB subsystem
+        if platform.system() == 'Linux':
+            # Check /sys/block for USB devices
+            device_name = device.split('/')[-1].rstrip('0123456789')
+            sys_path = f'/sys/block/{device_name}'
+            if os.path.exists(sys_path):
+                try:
+                    # Follow symlinks to see if it leads to USB subsystem
+                    real_path = os.path.realpath(sys_path)
+                    if 'usb' in real_path.lower():
+                        return True
+                except:
+                    pass
+
+        return False
+    except:
+        return False
+
+def get_current_cache_locations():
+    """Get current cache locations for different tools"""
+    cache_info = {}
+
+    # Pip cache location
+    try:
+        result = subprocess.run([sys.executable, '-m', 'pip', 'cache', 'dir'],
+                              capture_output=True, text=True, check=True)
+        cache_info['pip_cache'] = result.stdout.strip()
+    except:
+        cache_info['pip_cache'] = "~/.cache/pip (default)"
+
+    # PyTorch cache location
+    torch_home = os.environ.get('TORCH_HOME')
+    if torch_home:
+        cache_info['torch_cache'] = torch_home
+    else:
+        xdg_cache = os.environ.get('XDG_CACHE_HOME')
+        if xdg_cache:
+            cache_info['torch_cache'] = os.path.join(xdg_cache, 'torch')
+        else:
+            cache_info['torch_cache'] = os.path.expanduser('~/.cache/torch')
+
+    # Python pycache location
+    pycache_prefix = os.environ.get('PYTHONPYCACHEPREFIX')
+    if pycache_prefix:
+        cache_info['pycache'] = pycache_prefix
+    else:
+        cache_info['pycache'] = "Project directories (default)"
+
+    return cache_info
+
+def set_cache_location(cache_type, location):
+    """Set cache location for specified cache type"""
+    try:
+        if cache_type == "pip_cache":
+            result = subprocess.run([sys.executable, '-m', 'pip', 'config', 'set',
+                                   'global.cache-dir', location],
+                                  capture_output=True, text=True, check=True)
+            return f"✅ Pip cache location set to: {location}"
+
+        elif cache_type == "torch_cache":
+            # Set TORCH_HOME environment variable
+            os.environ['TORCH_HOME'] = location
+            return f"✅ PyTorch cache location set to: {location}\n⚠️ Note: This affects current session. Add 'export TORCH_HOME={location}' to ~/.bashrc for persistence."
+
+        elif cache_type == "pycache":
+            # Set PYTHONPYCACHEPREFIX environment variable
+            os.environ['PYTHONPYCACHEPREFIX'] = location
+            return f"✅ Python __pycache__ location set to: {location}\n⚠️ Note: This affects current session. Add 'export PYTHONPYCACHEPREFIX={location}' to ~/.bashrc for persistence."
+
+        else:
+            return "❌ Invalid cache type specified"
+
+    except subprocess.CalledProcessError as e:
+        return f"❌ Error setting cache location: {e}"
+    except Exception as e:
+        return f"❌ Unexpected error: {e}"
 
 def get_installed_packages() -> List[List[str]]:
     """Get list of installed packages with versions"""
@@ -49,7 +175,6 @@ def get_environment_info() -> str:
         venv_info = f"Virtual environment: {sys.prefix}"
 
     return f"""**Environment Information:**
-
 🐍 **Python:** {sys.version.split()[0]}
 📍 **Location:** `{sys.executable}`
 🖥️ **Platform:** {platform.system()} {platform.release()} ({platform.machine()})
@@ -75,8 +200,8 @@ def run_pip_command(command: List[str], console_output: queue.Queue):
             console_output.put(line)
 
         process.wait()
-
         console_output.put("═" * 60 + "\n")
+
         if process.returncode == 0:
             console_output.put("✅ Command completed successfully!\n\n")
         else:
@@ -96,13 +221,10 @@ class PackageManager:
         """Get welcome message for console"""
         return f"""🐍 Python Package Manager Console
 ═══════════════════════════════════════════════════════════
-
-Welcome to the Python Package Manager!
+Welcome to the Enhanced Python Package Manager!
 Environment: {sys.executable}
 Ready to manage your packages safely and efficiently.
-
 Commands will appear here in real-time...
-
 """
 
     def refresh_packages(self):
@@ -140,7 +262,7 @@ Commands will appear here in real-time...
         # Warn about critical system packages
         critical_packages = ['pip', 'setuptools', 'wheel', 'python', 'gradio']
         if package_name.lower() in critical_packages:
-            self.console_queue.put(f"⚠️  WARNING: '{package_name}' is a critical system package!\n")
+            self.console_queue.put(f"⚠️ WARNING: '{package_name}' is a critical system package!\n")
             self.console_queue.put("Uninstalling this may break your Python environment.\n")
             self.console_queue.put("Proceeding anyway...\n\n")
 
@@ -237,12 +359,11 @@ Commands will appear here in real-time...
 
     def upgrade_all_packages(self):
         """Upgrade all packages (dangerous operation)"""
-        self.console_queue.put("⚠️  BULK UPGRADE OPERATION\n")
+        self.console_queue.put("⚠️ BULK UPGRADE OPERATION\n")
         self.console_queue.put("═" * 60 + "\n")
         self.console_queue.put("WARNING: This will attempt to upgrade ALL packages!\n")
         self.console_queue.put("This operation can take a very long time and may cause conflicts.\n")
         self.console_queue.put("It is recommended to upgrade packages individually.\n\n")
-
         self.console_queue.put("🚀 Starting bulk upgrade...\n")
 
         # First get list of outdated packages
@@ -258,9 +379,9 @@ Commands will appear here in real-time...
 
             self.console_queue.put(f"Found {len(outdated_packages)} packages to upgrade:\n")
             for pkg in outdated_packages[:10]:  # Show first 10
-                self.console_queue.put(f"  • {pkg}\n")
+                self.console_queue.put(f" • {pkg}\n")
             if len(outdated_packages) > 10:
-                self.console_queue.put(f"  ... and {len(outdated_packages) - 10} more\n")
+                self.console_queue.put(f" ... and {len(outdated_packages) - 10} more\n")
 
             # Upgrade packages one by one
             for i, package in enumerate(outdated_packages, 1):
@@ -276,7 +397,6 @@ Commands will appear here in real-time...
     def freeze_requirements(self):
         """Generate requirements.txt file"""
         self.console_queue.put("📋 Generating requirements.txt...\n")
-
         command = [sys.executable, '-m', 'pip', 'freeze']
         thread = threading.Thread(target=run_pip_command, args=(command, self.console_queue))
         thread.daemon = True
@@ -352,16 +472,62 @@ pm = PackageManager()
 
 def create_interface():
     """Create the main Gradio interface"""
-
-    with gr.Blocks(title="🐍 Python Package Manager", theme=gr.themes.Soft()) as demo:
-
+    with gr.Blocks(title="🐍 Enhanced Python Package Manager", theme=gr.themes.Soft()) as demo:
         # Header
-        gr.Markdown("# 🐍 Python Package Manager")
-        gr.Markdown("**Manage your Python packages with ease and real-time feedback!**")
+        gr.Markdown("# 🐍 Enhanced Python Package Manager")
+        gr.Markdown("**Manage your Python packages with USB storage visualization and cache management!**")
 
         # Environment information
         with gr.Accordion("📊 Environment Information", open=False):
             gr.Markdown(get_environment_info())
+
+        # Storage Information Section
+        with gr.Accordion("💾 Storage & Cache Management", open=True):
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🗄️ Storage Overview")
+                    storage_df = gr.Dataframe(
+                        value=get_storage_info(),
+                        headers=["Device", "Mountpoint", "FileSystem", "Total (GB)", "Used (GB)", "Free (GB)", "Used %", "Type"],
+                        datatype=["str", "str", "str", "number", "number", "number", "number", "str"],
+                        interactive=False
+                    )
+                    refresh_storage_btn = gr.Button("🔄 Refresh Storage Info", variant="secondary")
+
+                with gr.Column(scale=1):
+                    gr.Markdown("### ⚙️ Cache Management")
+
+                    # Current cache locations display
+                    cache_info = get_current_cache_locations()
+                    current_caches = gr.Textbox(
+                        label="Current Cache Locations",
+                        value=f"📦 Pip Cache: {cache_info['pip_cache']}\n🔥 PyTorch Cache: {cache_info['torch_cache']}\n🐍 Python Cache: {cache_info['pycache']}",
+                        lines=4,
+                        interactive=False
+                    )
+
+                    # Cache management controls
+                    with gr.Row():
+                        cache_type = gr.Dropdown(
+                            choices=["pip_cache", "torch_cache", "pycache"],
+                            label="Cache Type",
+                            value="pip_cache"
+                        )
+                        new_cache_location = gr.Textbox(
+                            label="New Cache Location",
+                            placeholder="/media/username/usb_drive/cache_folder",
+                            scale=2
+                        )
+
+                    set_cache_btn = gr.Button("💾 Set Cache Location", variant="primary")
+                    refresh_cache_btn = gr.Button("🔄 Refresh Cache Info", variant="secondary")
+
+                    cache_status = gr.Textbox(
+                        label="Cache Status",
+                        value="Ready to set cache locations",
+                        interactive=False,
+                        lines=3
+                    )
 
         with gr.Row():
             # Left Column - Package Management
@@ -371,7 +537,6 @@ def create_interface():
                 # Package list section
                 with gr.Group():
                     gr.Markdown("### 📋 Installed Packages")
-
                     with gr.Row():
                         refresh_btn = gr.Button("🔄 Refresh List", variant="secondary", size="sm")
                         package_count = gr.Textbox(
@@ -391,7 +556,6 @@ def create_interface():
                 # Package operations section
                 with gr.Group():
                     gr.Markdown("### 🛠️ Package Operations")
-
                     with gr.Row():
                         package_input = gr.Textbox(
                             label="Package Name",
@@ -441,7 +605,6 @@ def create_interface():
             # Right Column - Console Output
             with gr.Column(scale=1):
                 gr.Markdown("## 🖥️ Real-time Console")
-
                 console_output = gr.Textbox(
                     label="Console Output",
                     value=pm.current_console,
@@ -469,6 +632,35 @@ def create_interface():
             packages = get_installed_packages()
             return f"Total: {len(packages)} packages"
 
+        def update_cache_info():
+            cache_info = get_current_cache_locations()
+            return f"📦 Pip Cache: {cache_info['pip_cache']}\n🔥 PyTorch Cache: {cache_info['torch_cache']}\n🐍 Python Cache: {cache_info['pycache']}"
+
+        def handle_set_cache(cache_type, location):
+            if not location or not location.strip():
+                return "❌ Please enter a cache location", update_cache_info()
+
+            result = set_cache_location(cache_type, location.strip())
+            return result, update_cache_info()
+
+        # Storage and cache event handlers
+        refresh_storage_btn.click(
+            fn=lambda: get_storage_info(),
+            outputs=[storage_df]
+        )
+
+        set_cache_btn.click(
+            fn=handle_set_cache,
+            inputs=[cache_type, new_cache_location],
+            outputs=[cache_status, current_caches]
+        )
+
+        refresh_cache_btn.click(
+            fn=update_cache_info,
+            outputs=[current_caches]
+        )
+
+        # Original event handlers
         refresh_btn.click(
             fn=lambda: (*pm.refresh_packages(), update_package_count()),
             outputs=[package_df, console_output, package_count]
@@ -545,7 +737,7 @@ def create_interface():
 
 def main():
     """Main function to start the application"""
-    print("🚀 Python Package Manager Starting Up...")
+    print("🚀 Enhanced Python Package Manager Starting Up...")
     print("═" * 60)
     print(f"📍 Python Environment: {sys.executable}")
     print(f"📦 Total Packages Found: {len(get_installed_packages())}")
@@ -557,10 +749,22 @@ def main():
         print("🎨 Gradio Version: Unknown")
 
     print("═" * 60)
+    print("💾 Detecting storage devices...")
+    storage_info = get_storage_info()
+    usb_drives = [drive for drive in storage_info if drive['Type'] == 'USB']
+    print(f"🔌 Found {len(usb_drives)} USB drive(s)")
+
+    print("⚙️ Cache locations:")
+    cache_info = get_current_cache_locations()
+    for cache_type, location in cache_info.items():
+        print(f"  • {cache_type}: {location}")
+
+    print("═" * 60)
     print("🌐 Starting web interface...")
     print("🔗 URL: http://127.0.0.1:7860")
     print("═" * 60)
     print("💡 Note: Console updates manually - click 'Refresh Console' to see latest output")
+    print("💡 New: USB storage visualization and cache management available!")
     print("═" * 60)
 
     # Create and launch interface
