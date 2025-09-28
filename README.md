@@ -29,3 +29,10 @@ A comprehensive Gradio-based web interface for managing Python packages with adv
 - **Bulk operations** including upgrade all packages
 - **Search integration** with PyPI
 - **Safety warnings** for critical system packages
+
+### 💾 **Storage & Cache Management**
+- **USB storage detection** and visualization
+- **Storage usage monitoring** with detailed disk information
+- **Configurable cache locations** for pip, PyTorch, and Python
+- **Cache management** with environment variable setting
+- **Cross-platform storage detection** (Linux, Windows, macOS)
