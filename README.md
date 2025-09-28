@@ -18,3 +18,14 @@ A comprehensive Gradio-based web interface for managing Python packages with adv
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
+
+## ✨ Features
+
+### 📦 **Core Package Management**
+- **Install/Uninstall/Update** packages with version specifications
+- **Real-time console output** with threaded execution
+- **Package information** retrieval and detailed metadata display
+- **Requirements management** (import/export requirements.txt)
+- **Bulk operations** including upgrade all packages
+- **Search integration** with PyPI
+- **Safety warnings** for critical system packages
