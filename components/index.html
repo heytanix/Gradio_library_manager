@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUIPM - Python User Interfaced Package Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="app-title">PUIPM</h1>
+                <p class="app-subtitle">Python Package Manager</p>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="#packages" class="nav-item active" data-section="packages">
+                    <i class="fas fa-box"></i>
+                    Packages
+                </a>
+                <a href="#paths" class="nav-item" data-section="paths">
+                    <i class="fas fa-folder-open"></i>
+                    Paths
+                </a>
+                <a href="#console" class="nav-item" data-section="console">
+                    <i class="fas fa-terminal"></i>
+                    Console
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Packages Section -->
+            <div id="packages-section" class="content-section active">
+                <div class="section-header">
+                    <h2>Package Management</h2>
+                    <div class="package-actions">
+                        <input type="text" id="package-search" placeholder="Search packages..." class="search-input">
+                        <button id="refresh-packages" class="btn btn-secondary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Install Package Section -->
+                <div class="install-section">
+                    <div class="install-form">
+                        <input type="text" id="package-name" placeholder="Package name (e.g., numpy, pandas)" class="form-input">
+                        <input type="text" id="package-version" placeholder="Version (optional, e.g., >=1.21.0)" class="form-input">
+                        <button id="install-package" class="btn btn-primary">
+                            <i class="fas fa-download"></i> Install
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Package List -->
+                <div class="package-list">
+                    <div class="package-header">
+                        <div class="package-count">
+                            <span id="total-packages">Loading packages...</span>
+                        </div>
+                        <div class="list-controls">
+                            <select id="sort-packages" class="form-select">
+                                <option value="name">Sort by Name</option>
+                                <option value="version">Sort by Version</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="packages-container" class="packages-grid">
+                        <div class="loading-packages">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading packages...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paths Section -->
+            <div id="paths-section" class="content-section">
+                <div class="section-header">
+                    <h2>Cache & Storage Paths</h2>
+                    <button id="refresh-storage" class="btn btn-secondary">
+                        <i class="fas fa-sync-alt"></i> Refresh Storage
+                    </button>
+                </div>
+
+                <!-- Cache Paths -->
+                <div class="cache-paths">
+                    <div class="path-item">
+                        <h3>PyCache Path:</h3>
+                        <div class="path-display">
+                            <div class="path-value" id="pycache-path">Loading...</div>
+                            <button class="btn btn-sm btn-secondary" onclick="editPath('pycache')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="path-item">
+                        <h3>PIP Cache Path:</h3>
+                        <div class="path-display">
+                            <div class="path-value" id="pip-cache-path">Loading...</div>
+                            <button class="btn btn-sm btn-secondary" onclick="editPath('pip_cache')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="path-item">
+                        <h3>Torch Cache Path:</h3>
+                        <div class="path-display">
+                            <div class="path-value" id="torch-cache-path">Loading...</div>
+                            <button class="btn btn-sm btn-secondary" onclick="editPath('torch_cache')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage Information -->
+                <div class="storage-info">
+                    <h3>Storage Overview</h3>
+                    <div id="storage-container" class="storage-grid">
+                        <div class="loading-storage">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading storage information...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other libraries section (matching Figma design) -->
+                <div class="other-libraries">
+                    <div class="library-item">
+                        <h3>Other libraries if installation found:</h3>
+                        <div class="library-placeholder">Scanning for additional libraries...</div>
+                    </div>
+                    <div class="library-item">
+                        <h3>Other libraries if installation found:</h3>
+                        <div class="library-placeholder">Checking system installations...</div>
+                    </div>
+                    <div class="library-item">
+                        <h3>Other libraries if installation found:</h3>
+                        <div class="library-placeholder">Detecting framework installations...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Console Section -->
+            <div id="console-section" class="content-section">
+                <div class="section-header">
+                    <h2>Console Output</h2>
+                    <div class="console-controls">
+                        <button id="clear-console" class="btn btn-secondary">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                        <button id="copy-console" class="btn btn-secondary">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="console-container">
+                    <div id="console-output" class="console-output">
+                        <div class="console-welcome">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Connecting to console...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Modal for package operations -->
+    <div id="action-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Package Action</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="modal-message">Are you sure you want to perform this action?</p>
+                <div class="modal-package-info">
+                    <strong>Package: </strong><span id="modal-package-name"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Path Edit Modal -->
+    <div id="path-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="path-modal-title">Edit Cache Path</h3>
+                <span class="close" onclick="closePathModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <label for="new-path">New Path:</label>
+                <input type="text" id="new-path" class="form-input" placeholder="Enter new cache path...">
+                <p class="path-help">Enter the full path where you want to store the cache files.</p>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closePathModal()" class="btn btn-secondary">Cancel</button>
+                <button onclick="savePath()" class="btn btn-primary">Save Path</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Processing operation...</p>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
