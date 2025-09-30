@@ -1,5 +1,5 @@
 // PUIPM - Python User Interfaced Package Manager
-// Frontend JavaScript application
+// FINAL VERSION WITH AGGRESSIVE UI REFRESH TO SOLVE PERSISTENT DISPLAY ISSUES
 
 class PUIPM {
     constructor() {
@@ -9,7 +9,7 @@ class PUIPM {
         this.currentAction = null;
         this.selectedPackage = null;
         this.currentPathType = null;
-
+        this.forceRefreshTimer = null;
         this.initializeApp();
     }
 
@@ -17,11 +17,13 @@ class PUIPM {
         this.initializeSocket();
         this.bindEventListeners();
         this.loadInitialData();
+        this.startAggressiveRefresh();
     }
 
     initializeSocket() {
         this.socket = io();
 
+        // Console events
         this.socket.on('console_update', (data) => {
             this.appendToConsole(data.data);
         });
@@ -30,21 +32,133 @@ class PUIPM {
             this.setConsoleContent(data.data);
         });
 
+        // CRITICAL: Operation complete handler with AGGRESSIVE refresh
         this.socket.on('operation_complete', (data) => {
+            console.log('🔄 Operation completed, FORCING UI refresh');
             this.hideLoading();
-            if (data.success) {
-                setTimeout(() => this.loadPackages(), 1000);
-            }
+
+            // AGGRESSIVE: Multiple immediate refresh attempts
+            this.forceRefreshPackageList();
+            setTimeout(() => this.forceRefreshPackageList(), 500);
+            setTimeout(() => this.forceRefreshPackageList(), 1500);
+            setTimeout(() => this.forceRefreshPackageList(), 3000);
+        });
+
+        // Handle initial package load
+        this.socket.on('initial_package_load', (data) => {
+            console.log('📦 Initial package load:', data.count);
+            this.forceUpdatePackageList(data.packages, 'initial');
+        });
+
+        // AGGRESSIVE: Multiple listeners for different refresh events
+        this.socket.on('force_package_update', (data) => {
+            console.log('📦 FORCE UPDATE received:', data.count, 'packages');
+            this.forceUpdatePackageList(data.packages, 'force_update');
+        });
+
+        this.socket.on('package_list_changed', (data) => {
+            console.log('📦 Package list changed:', data.count, 'packages');
+            this.forceUpdatePackageList(data.packages, 'list_changed');
+        });
+
+        this.socket.on('refresh_package_display', (data) => {
+            console.log('📦 Display refresh:', data.packages.length, 'packages');
+            this.forceUpdatePackageList(data.packages, 'display_refresh');
         });
 
         this.socket.on('connect', () => {
-            console.log('Connected to server');
+            console.log('✅ Connected to server');
+            this.forceRefreshPackageList();
         });
 
         this.socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            this.showNotification('Connection lost. Please refresh the page.', 'error');
+            console.log('❌ Disconnected from server');
+            this.showNotification('Connection lost. Refreshing...', 'warning');
         });
+
+        this.socket.on('reconnect', () => {
+            console.log('✅ Reconnected to server - FORCING REFRESH');
+            this.forceRefreshPackageList();
+        });
+    }
+
+    // AGGRESSIVE: Force update package list with complete UI rebuild
+    forceUpdatePackageList(newPackages, source) {
+        console.log(`🔄 FORCE UPDATING package list from ${source}: ${newPackages.length} packages`);
+
+        // Clear everything first
+        this.packages = [];
+        this.filteredPackages = [];
+
+        // Force clear the UI
+        const container = document.getElementById('packages-container');
+        if (container) {
+            container.innerHTML = '<div style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin"></i> Updating...</div>';
+        }
+
+        // Update with new data after a tiny delay to ensure DOM updates
+        setTimeout(() => {
+            this.packages = Array.isArray(newPackages) ? newPackages : [];
+            this.filteredPackages = [...this.packages];
+
+            // Force re-apply search filter if any
+            const searchInput = document.getElementById('package-search');
+            if (searchInput && searchInput.value.trim()) {
+                this.filterPackages(searchInput.value.trim());
+            } else {
+                this.renderPackages();
+            }
+
+            this.updatePackageCount();
+
+            console.log(`✅ UI FORCIBLY UPDATED: ${this.packages.length} packages displayed`);
+
+            // Show success notification
+            if (source !== 'initial') {
+                this.showNotification(`Packages refreshed: ${this.packages.length} packages`, 'success');
+            }
+        }, 50);
+    }
+
+    // AGGRESSIVE: Force refresh via both WebSocket and HTTP
+    forceRefreshPackageList() {
+        console.log('🔄 FORCE REFRESHING package list (dual method)');
+
+        // Method 1: WebSocket request
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('force_refresh_request');
+        }
+
+        // Method 2: Direct HTTP request as backup
+        setTimeout(() => {
+            this.httpRefreshPackageList();
+        }, 100);
+    }
+
+    // HTTP method to get fresh package list
+    async httpRefreshPackageList() {
+        try {
+            console.log('🌐 HTTP refresh request');
+            const response = await fetch('/api/packages?t=' + Date.now()); // Cache buster
+            if (!response.ok) throw new Error('HTTP refresh failed');
+
+            const packages = await response.json();
+            console.log('📦 HTTP refresh got:', packages.length, 'packages');
+            this.forceUpdatePackageList(packages, 'http_refresh');
+        } catch (error) {
+            console.error('HTTP refresh failed:', error);
+        }
+    }
+
+    // Start aggressive refresh timer
+    startAggressiveRefresh() {
+        // Refresh every 10 seconds (more frequent)
+        this.forceRefreshTimer = setInterval(() => {
+            console.log('⏰ Periodic aggressive refresh');
+            this.forceRefreshPackageList();
+        }, 10000);
+
+        console.log('⏰ Aggressive refresh timer started (10 second intervals)');
     }
 
     bindEventListeners() {
@@ -56,9 +170,12 @@ class PUIPM {
             });
         });
 
-        // Package management
+        // Package management - ENHANCED with aggressive refresh
         document.getElementById('refresh-packages')?.addEventListener('click', () => {
-            this.loadPackages();
+            console.log('🔄 Manual refresh button clicked');
+            this.showLoading();
+            this.forceRefreshPackageList();
+            setTimeout(() => this.hideLoading(), 1000);
         });
 
         document.getElementById('install-package')?.addEventListener('click', () => {
@@ -134,7 +251,7 @@ class PUIPM {
     }
 
     loadInitialData() {
-        this.loadPackages();
+        this.forceRefreshPackageList(); // Use aggressive refresh for initial load
         this.loadCacheLocations();
         this.loadStorageInfo();
         this.loadOtherLibraries();
@@ -158,87 +275,85 @@ class PUIPM {
             this.loadCacheLocations();
             this.loadStorageInfo();
             this.loadOtherLibraries();
+        } else if (section === 'packages') {
+            // AGGRESSIVE refresh when switching to packages
+            console.log('📦 Switched to packages section - forcing refresh');
+            this.forceRefreshPackageList();
         }
     }
 
+    // LEGACY: Keep for compatibility
     async loadPackages() {
-        this.showLoading();
-        try {
-            const response = await fetch('/api/packages');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            this.packages = Array.isArray(data) ? data : [];
-            this.filteredPackages = [...this.packages];
-            this.renderPackages();
-            this.updatePackageCount();
-        } catch (error) {
-            console.error('Error loading packages:', error);
-            this.showNotification('Error loading packages: ' + error.message, 'error');
-            // Show empty state
-            this.packages = [];
-            this.filteredPackages = [];
-            this.renderPackages();
-            this.updatePackageCount();
-        } finally {
-            this.hideLoading();
-        }
+        this.forceRefreshPackageList();
     }
 
     renderPackages() {
         const container = document.getElementById('packages-container');
         if (!container) return;
 
-        // Remove any existing event listeners to prevent memory leaks
+        // FORCE clear container first
         container.innerHTML = '';
 
         if (this.filteredPackages.length === 0) {
             container.innerHTML = `
-            <div class="no-packages">
-            <p>No packages found.</p>
+            <div class="no-packages" style="text-align: center; padding: 3rem; color: #6b7280;">
+            <i class="fas fa-box-open" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+            <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">No packages found</p>
+            ${this.packages.length === 0 ? '<p style="font-size: 0.9rem; opacity: 0.7;">Click refresh or check your connection</p>' : ''}
             </div>
             `;
             return;
         }
 
+        console.log(`🎨 Rendering ${this.filteredPackages.length} packages in UI`);
+
+        // Create document fragment for better performance
+        const fragment = document.createDocumentFragment();
+
         this.filteredPackages.forEach(pkg => {
             const packageCard = document.createElement('div');
             packageCard.className = 'package-card';
+
+            // ENHANCED: More distinctive package cards with better data attributes
             packageCard.innerHTML = `
             <div class="package-info">
-            <div class="package-name">${this.escapeHtml(pkg.name)}</div>
-            <div class="package-version">v${this.escapeHtml(pkg.version)}</div>
+            <div class="package-name" title="${this.escapeHtml(pkg.name)}">${this.escapeHtml(pkg.name)}</div>
+            <div class="package-version" title="Version ${this.escapeHtml(pkg.version)}">v${this.escapeHtml(pkg.version)}</div>
             </div>
             <div class="package-actions">
             <button class="action-btn action-btn-delete"
             data-action="uninstall"
             data-package-name="${this.escapeHtml(pkg.name)}"
-            title="Uninstall package">
+            title="Uninstall ${this.escapeHtml(pkg.name)}">
             <i class="fas fa-trash"></i>
             </button>
             <button class="action-btn action-btn-reinstall"
             data-action="reinstall"
             data-package-name="${this.escapeHtml(pkg.name)}"
-            title="Reinstall package">
+            title="Reinstall ${this.escapeHtml(pkg.name)}">
             <i class="fas fa-sync-alt"></i>
             </button>
             <button class="action-btn action-btn-update"
             data-action="update"
             data-package-name="${this.escapeHtml(pkg.name)}"
-            title="Update package">
+            title="Update ${this.escapeHtml(pkg.name)}">
             <i class="fas fa-arrow-up"></i>
             </button>
             </div>
             `;
-            container.appendChild(packageCard);
+
+            fragment.appendChild(packageCard);
         });
 
-        // Add single event listener to container for all action buttons
+        // Add all cards at once for better performance
+        container.appendChild(fragment);
+
+        // Add event delegation for action buttons
         container.removeEventListener('click', this.handleActionClick);
         this.handleActionClick = this.handleActionClick.bind(this);
         container.addEventListener('click', this.handleActionClick);
+
+        console.log(`✅ Successfully rendered ${this.filteredPackages.length} package cards`);
     }
 
     handleActionClick(e) {
@@ -251,17 +366,20 @@ class PUIPM {
         const action = actionBtn.dataset.action;
         const packageName = actionBtn.dataset.packageName;
 
-        console.log('Action clicked:', action, packageName);
+        console.log('🎯 Action clicked:', action, packageName);
 
         if (action && packageName) {
             this.showActionModal(action, packageName);
         } else {
-            console.error('Missing action or package name:', { action, packageName });
+            console.error('❌ Missing action or package name:', { action, packageName });
+            this.showNotification('Error: Invalid action or package', 'error');
         }
     }
 
     filterPackages(searchTerm) {
         const term = searchTerm.toLowerCase().trim();
+        console.log('🔍 Filtering packages:', term);
+
         if (!term) {
             this.filteredPackages = [...this.packages];
         } else {
@@ -270,11 +388,14 @@ class PUIPM {
             pkg.version.toLowerCase().includes(term)
             );
         }
+
         this.renderPackages();
         this.updatePackageCount();
     }
 
     sortPackages(sortBy) {
+        console.log('📊 Sorting packages by:', sortBy);
+
         this.filteredPackages.sort((a, b) => {
             if (sortBy === 'name') {
                 return a.name.localeCompare(b.name);
@@ -283,6 +404,7 @@ class PUIPM {
             }
             return 0;
         });
+
         this.renderPackages();
     }
 
@@ -297,6 +419,8 @@ class PUIPM {
         if (countElement) {
             countElement.textContent = countText;
         }
+
+        console.log(`📊 Package count updated: ${countText}`);
     }
 
     async installPackage() {
@@ -313,7 +437,9 @@ class PUIPM {
             return;
         }
 
+        console.log('📦 Installing package:', packageName, packageVersion);
         this.showLoading();
+
         try {
             const response = await fetch('/api/install', {
                 method: 'POST',
@@ -341,24 +467,22 @@ class PUIPM {
             }
         } catch (error) {
             console.error('Error installing package:', error);
-            this.showNotification('Error installing package', 'error');
+            this.showNotification('Error installing package: ' + error.message, 'error');
             this.hideLoading();
         }
     }
 
     showActionModal(action, packageName) {
-        console.log('showActionModal called with:', { action, packageName });
+        console.log('🎯 Showing action modal:', { action, packageName });
 
         if (!action || !packageName) {
-            console.error('Invalid action or package name:', { action, packageName });
+            console.error('❌ Invalid modal parameters');
             this.showNotification('Error: Invalid action or package name', 'error');
             return;
         }
 
         this.currentAction = action;
         this.selectedPackage = packageName;
-
-        console.log('Modal state set:', { currentAction: this.currentAction, selectedPackage: this.selectedPackage });
 
         const modal = document.getElementById('action-modal');
         const title = document.getElementById('modal-title');
@@ -367,7 +491,8 @@ class PUIPM {
         const confirmBtn = document.getElementById('modal-confirm');
 
         if (!modal || !title || !message || !packageInfo || !confirmBtn) {
-            console.error('Modal elements not found');
+            console.error('❌ Modal elements not found');
+            this.showNotification('Error: Modal not available', 'error');
             return;
         }
 
@@ -393,8 +518,8 @@ class PUIPM {
                 confirmBtn.innerHTML = '<i class="fas fa-arrow-up"></i> Update';
                 break;
             default:
-                console.error('Unknown action:', action);
-                this.showNotification('Error: Unknown action', 'error');
+                console.error('❌ Unknown action:', action);
+                this.showNotification('Error: Unknown action type', 'error');
                 return;
         }
 
@@ -411,16 +536,8 @@ class PUIPM {
     }
 
     async confirmAction() {
-        console.log('confirmAction called with state:', {
-            currentAction: this.currentAction,
-            selectedPackage: this.selectedPackage
-        });
-
         if (!this.currentAction || !this.selectedPackage) {
-            console.error('Missing action or package:', {
-                currentAction: this.currentAction,
-                selectedPackage: this.selectedPackage
-            });
+            console.error('❌ Missing action or package for confirmation');
             this.showNotification('Error: Missing action or package information', 'error');
             return;
         }
@@ -428,12 +545,12 @@ class PUIPM {
         const action = this.currentAction;
         const packageName = this.selectedPackage;
 
+        console.log(`🚀 Confirming action: ${action} on ${packageName}`);
+
         this.closeModal();
         this.showLoading();
 
         try {
-            console.log(`Making request to /api/${action} with package:`, packageName);
-
             const response = await fetch(`/api/${action}`, {
                 method: 'POST',
                 headers: {
@@ -444,26 +561,25 @@ class PUIPM {
                 })
             });
 
-            console.log('Response status:', response.status);
-
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Response error:', errorText);
                 throw new Error(`${action} request failed: ${errorText}`);
             }
 
             const result = await response.json();
-            console.log('Response result:', result);
 
             if (result.success) {
                 this.showNotification(result.message, 'success');
                 this.switchSection('console');
+
+                // AGGRESSIVE: Force refresh after action starts
+                setTimeout(() => this.forceRefreshPackageList(), 1000);
             } else {
                 this.showNotification(result.message || 'Operation failed', 'error');
                 this.hideLoading();
             }
         } catch (error) {
-            console.error(`Error performing ${action}:`, error);
+            console.error(`❌ Error performing ${action}:`, error);
             this.showNotification(`Error performing ${action}: ${error.message}`, 'error');
             this.hideLoading();
         }
@@ -518,9 +634,7 @@ class PUIPM {
             storageCard.innerHTML = `
             <div class="storage-header">
             <div class="storage-device">${this.escapeHtml(storage.device)}</div>
-            <div class="storage-type ${storage.type.toLowerCase()}">
-            ${this.escapeHtml(storage.type)}
-            </div>
+            <div class="storage-type ${storage.type.toLowerCase()}">${this.escapeHtml(storage.type)}</div>
             </div>
             <div class="storage-details">
             <div><strong>Mount Point:</strong> ${this.escapeHtml(storage.mountpoint)}</div>
@@ -537,7 +651,6 @@ class PUIPM {
     async loadOtherLibraries() {
         try {
             const otherLibraries = await this.detectOtherLibraries();
-
             if (otherLibraries.length > 0) {
                 this.renderOtherLibraries(otherLibraries);
             } else {
@@ -552,11 +665,7 @@ class PUIPM {
     }
 
     async detectOtherLibraries() {
-        const otherLibraries = [];
-
-        // This is a placeholder - you can implement actual detection logic
-        // For now, just return empty array (no libraries found)
-        return otherLibraries;
+        return [];
     }
 
     renderOtherLibraries(libraries) {
@@ -629,6 +738,8 @@ class PUIPM {
     }
 
     showNotification(message, type = 'info') {
+        console.log(`📢 Notification (${type}): ${message}`);
+
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.innerHTML = `
@@ -677,6 +788,18 @@ class PUIPM {
         };
         return String(text).replace(/[&<>"']/g, m => map[m]);
     }
+
+    // Cleanup method
+    destroy() {
+        if (this.forceRefreshTimer) {
+            clearInterval(this.forceRefreshTimer);
+            this.forceRefreshTimer = null;
+        }
+        if (this.socket) {
+            this.socket.disconnect();
+        }
+        console.log('🧹 PUIPM cleanup completed');
+    }
 }
 
 // Path editing functions (global scope for onclick handlers)
@@ -721,6 +844,7 @@ async function savePath() {
 
     try {
         app.showLoading();
+
         const response = await fetch('/api/set-cache', {
             method: 'POST',
             headers: {
@@ -747,7 +871,19 @@ async function savePath() {
 }
 
 // Initialize the application
+console.log('🚀 Initializing PUIPM with AGGRESSIVE REFRESH');
 const app = new PUIPM();
 
-// Make app globally available for onclick handlers
+// Make app globally available
 window.app = app;
+
+// Enhanced cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (app) {
+        console.log('🧹 Cleaning up PUIPM before unload');
+        app.destroy();
+    }
+});
+
+// Additional debug info
+console.log('✅ PUIPM AGGRESSIVE REFRESH VERSION LOADED');
