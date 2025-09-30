@@ -15,7 +15,7 @@
                 <h1 class="app-title">PUIPM</h1>
                 <p class="app-subtitle">Python Package Manager</p>
             </div>
-            
+
             <nav class="sidebar-nav">
                 <a href="#packages" class="nav-item active" data-section="packages">
                     <i class="fas fa-box"></i>
@@ -70,7 +70,7 @@
                             </select>
                         </div>
                     </div>
-                    
+
                     <div id="packages-container" class="packages-grid">
                         <div class="loading-packages">
                             <i class="fas fa-spinner fa-spin"></i>
@@ -100,7 +100,7 @@
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="path-item">
                         <h3>PIP Cache Path:</h3>
                         <div class="path-display">
@@ -110,7 +110,7 @@
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="path-item">
                         <h3>Torch Cache Path:</h3>
                         <div class="path-display">
@@ -133,20 +133,9 @@
                     </div>
                 </div>
 
-                <!-- Other libraries section (matching Figma design) -->
-                <div class="other-libraries">
-                    <div class="library-item">
-                        <h3>Other libraries if installation found:</h3>
-                        <div class="library-placeholder">Scanning for additional libraries...</div>
-                    </div>
-                    <div class="library-item">
-                        <h3>Other libraries if installation found:</h3>
-                        <div class="library-placeholder">Checking system installations...</div>
-                    </div>
-                    <div class="library-item">
-                        <h3>Other libraries if installation found:</h3>
-                        <div class="library-placeholder">Detecting framework installations...</div>
-                    </div>
+                <!-- Dynamic other libraries section (only shown when libraries are detected) -->
+                <div id="other-libraries-container" class="other-libraries" style="display: none;">
+                    <!-- This will be populated dynamically by JavaScript when other libraries are found -->
                 </div>
             </div>
 
@@ -163,13 +152,10 @@
                         </button>
                     </div>
                 </div>
-                
+
                 <div class="console-container">
                     <div id="console-output" class="console-output">
-                        <div class="console-welcome">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            <p>Connecting to console...</p>
-                        </div>
+                        <!-- Console content will be populated by socket connection -->
                     </div>
                 </div>
             </div>
